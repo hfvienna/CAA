@@ -7,6 +7,7 @@ python prompting_with_steering.py --behaviors sycophancy --layers 10 --multiplie
 
 import json
 from llama_wrapper import LlamaWrapper
+from gemma_1_wrapper import Gemma1Wrapper
 import os
 from dotenv import load_dotenv
 import argparse
@@ -118,7 +119,8 @@ def test_steering(
         "truthful_qa": get_truthful_qa_data(),
         "mmlu": get_mmlu_data(),
     }
-    model = LlamaWrapper(
+    # hfvienna override
+    model = Gemma1Wrapper(
         HUGGINGFACE_TOKEN,
         size=settings.model_size,
         use_chat=not settings.use_base_model,
@@ -191,9 +193,10 @@ if __name__ == "__main__":
     parser.add_argument("--override_vector", type=int, default=None)
     parser.add_argument("--override_vector_model", type=str, default=None)
     parser.add_argument("--use_base_model", action="store_true", default=False)
-    parser.add_argument("--model_size", type=str, choices=["7b", "13b"], default="7b")
+    parser.add_argument("--model_size", type=str, choices=["7b", "13b", "2b"], default="7b")
     parser.add_argument("--override_model_weights_path", type=str, default=None)
     parser.add_argument("--overwrite", action="store_true", default=False)
+    parser.add_argument("--model_type", type=str, choices=["llama", "gemma_1"], default="llama")
     
     args = parser.parse_args()
 
@@ -205,6 +208,7 @@ if __name__ == "__main__":
     steering_settings.use_base_model = args.use_base_model
     steering_settings.model_size = args.model_size
     steering_settings.override_model_weights_path = args.override_model_weights_path
+    steering_settings.model_type = args.model_type
 
     for behavior in args.behaviors:
         steering_settings.behavior = behavior

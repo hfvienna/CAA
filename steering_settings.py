@@ -72,6 +72,8 @@ class SteeringSettings:
         if self.use_base_model:
             if self.model_size == "7b":
                 return "Llama 2 7B"
+            if self.model_size == "2b" and self.model_type == "gemma_1":
+                return "Gemma 1 2B"
             else:
                 return "Llama 2 13B"
         else:

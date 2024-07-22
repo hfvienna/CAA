@@ -13,9 +13,10 @@ from tqdm import tqdm
 import os
 from dotenv import load_dotenv
 from llama_wrapper import LlamaWrapper
+from gemma_1_wrapper import Gemma1Wrapper
 import argparse
 from typing import List
-from utils.tokenize import tokenize_llama_base, tokenize_llama_chat
+from utils.tokenize import tokenize_llama_base, tokenize_llama_chat, tokenize_gemma_1_base # tokenize_gemma_1_chat
 from behaviors import (
     get_vector_dir,
     get_activations_dir,
@@ -31,7 +32,7 @@ HUGGINGFACE_TOKEN = os.getenv("HF_TOKEN")
 
 
 class ComparisonDataset(Dataset):
-    def __init__(self, data_path, token, model_name_path, use_chat):
+    def __init__(self, data_path, token, model_name_path, use_chat, model_type):
         with open(data_path, "r") as f:
             self.data = json.load(f)
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -39,21 +40,32 @@ class ComparisonDataset(Dataset):
         )
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.use_chat = use_chat
+        self.model_type = model_type
 
-    def prompt_to_tokens(self, instruction, model_output):
-        if self.use_chat:
+    def prompt_to_tokens(self, instruction, model_output, model_type):
+        if self.use_chat and model_type == "llama":
             tokens = tokenize_llama_chat(
                 self.tokenizer,
                 user_input=instruction,
                 model_output=model_output,
             )
-        else:
+        elif not self.use_chat and model_type == "llama":
             tokens = tokenize_llama_base(
                 self.tokenizer,
                 user_input=instruction,
                 model_output=model_output,
             )
+        elif not self.use_chat and model_type == "gemma_1":
+            tokens = tokenize_gemma_1_base(
+                self.tokenizer,
+                user_input=instruction,
+                model_output=model_output,
+            )
+        else:
+            print("Error: Check model_type and use_chat")
         return t.tensor(tokens).unsqueeze(0)
+
+        
 
     def __len__(self):
         return len(self.data)
@@ -63,15 +75,16 @@ class ComparisonDataset(Dataset):
         p_text = item["answer_matching_behavior"]
         n_text = item["answer_not_matching_behavior"]
         q_text = item["question"]
-        p_tokens = self.prompt_to_tokens(q_text, p_text)
-        n_tokens = self.prompt_to_tokens(q_text, n_text)
+        p_tokens = self.prompt_to_tokens(q_text, p_text, self.model_type)
+        n_tokens = self.prompt_to_tokens(q_text, n_text, self.model_type)
         return p_tokens, n_tokens
 
 def generate_save_vectors_for_behavior(
     layers: List[int],
     save_activations: bool,
     behavior: List[str],
-    model: LlamaWrapper,
+    #hfvienna manual override
+    model: Gemma1Wrapper,
 ):
     data_path = get_ab_data_path(behavior)
     if not os.path.exists(get_vector_dir(behavior)):
@@ -90,6 +103,7 @@ def generate_save_vectors_for_behavior(
         HUGGINGFACE_TOKEN,
         model.model_name_path,
         model.use_chat,
+        model.model_type
     )
 
     for p_tokens, n_tokens in tqdm(dataset, desc="Processing prompts"):
@@ -132,6 +146,7 @@ def generate_save_vectors(
     use_base_model: bool,
     model_size: str,
     behaviors: List[str],
+    model_type: str
 ):
     """
     layers: list of layers to generate vectors for
@@ -140,13 +155,22 @@ def generate_save_vectors(
     model_size: size of the model to use, either "7b" or "13b"
     behaviors: behaviors to generate vectors for
     """
-    model = LlamaWrapper(
-        HUGGINGFACE_TOKEN, size=model_size, use_chat=not use_base_model
-    )
-    for behavior in behaviors:
-        generate_save_vectors_for_behavior(
-            layers, save_activations, behavior, model
+    if model_type == "llama":
+        model = LlamaWrapper(
+            HUGGINGFACE_TOKEN, size=model_size, use_chat=not use_base_model, model_type=model_type
         )
+        for behavior in behaviors:
+            generate_save_vectors_for_behavior(
+                layers, save_activations, behavior, model
+            )
+    else:
+        model = Gemma1Wrapper(
+            HUGGINGFACE_TOKEN, size=model_size, model_type=model_type
+        )
+        for behavior in behaviors:
+            generate_save_vectors_for_behavior(
+                layers, save_activations, behavior, model
+            )
 
 
 if __name__ == "__main__":
@@ -154,8 +178,9 @@ if __name__ == "__main__":
     parser.add_argument("--layers", nargs="+", type=int, default=list(range(32)))
     parser.add_argument("--save_activations", action="store_true", default=False)
     parser.add_argument("--use_base_model", action="store_true", default=False)
-    parser.add_argument("--model_size", type=str, choices=["7b", "13b"], default="7b")
+    parser.add_argument("--model_size", type=str, choices=["7b", "13b", "2b"], default="7b")
     parser.add_argument("--behaviors", nargs="+", type=str, default=ALL_BEHAVIORS)
+    parser.add_argument("--model_type", type=str, choices=["llama", "gemma_1"], default="llama")
 
     args = parser.parse_args()
     generate_save_vectors(
@@ -163,5 +188,6 @@ if __name__ == "__main__":
         args.save_activations,
         args.use_base_model,
         args.model_size,
-        args.behaviors
+        args.behaviors,
+        args.model_type
     )

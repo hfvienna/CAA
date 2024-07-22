@@ -117,10 +117,11 @@ class LlamaWrapper:
         size: str = "7b",
         use_chat: bool = True,
         override_model_weights_path: Optional[str] = None,
+        model_type: str = "llama"
     ):
         self.device = "cuda" if t.cuda.is_available() else "cpu"
         self.use_chat = use_chat
-        self.model_name_path = get_model_path(size, not use_chat)
+        self.model_name_path = get_model_path(size, not use_chat, model_type)
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name_path, token=hf_token
         )

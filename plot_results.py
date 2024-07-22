@@ -35,6 +35,7 @@ def get_data(
     if len(filenames) == 0:
         print(f"[WARN] no filenames found for filter {settings}")
         return []
+    print(f"Get Data Filenames: {filenames}")
     with open(filenames[0], "r") as f:
         return json.load(f)
 
@@ -509,7 +510,8 @@ if __name__ == "__main__":
     parser.add_argument("--override_vector", type=int, default=None)
     parser.add_argument("--override_vector_model", type=str, default=None)
     parser.add_argument("--use_base_model", action="store_true", default=False)
-    parser.add_argument("--model_size", type=str, choices=["7b", "13b"], default="7b")
+    parser.add_argument("--model_size", type=str, choices=["7b", "13b", "2b"], default="7b")
+    parser.add_argument("--model_type", type=str, choices=["llama", "gemma_1"], default="llama")
     parser.add_argument("--override_weights", type=str, nargs="+", default=[])
     
     args = parser.parse_args()
@@ -529,9 +531,9 @@ if __name__ == "__main__":
     for behavior in args.behaviors:
         steering_settings = steering_settings_from_args(args, behavior)
         if steering_settings.type == "ab":
-            if len(args.layers) > 1 and 1 in args.multipliers and -1 in args.multipliers:
+            if len(args.layers) > 1 and 5 in args.multipliers and -5 in args.multipliers:
                 plot_ab_data_per_layer(
-                    args.layers, [1, -1], steering_settings
+                    args.layers, [5, -5], steering_settings
                 )
             if len(args.layers) == 1:
                 plot_ab_results_for_layer(args.layers[0], args.multipliers, steering_settings)

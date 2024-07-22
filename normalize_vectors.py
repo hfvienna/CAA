@@ -3,7 +3,7 @@ from utils.helpers import get_model_path
 import torch as t
 import os
 
-def normalize_vectors(model_size: str, is_base: bool, n_layers: int):
+def normalize_vectors(model_size: str, is_base: bool, n_layers: int, model_type: str):
     # make normalized_vectors directory
     normalized_vectors_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "normalized_vectors")
     if not os.path.exists(normalized_vectors_dir):
@@ -14,7 +14,7 @@ def normalize_vectors(model_size: str, is_base: bool, n_layers: int):
         vecs = {}
         new_paths = {}
         for behavior in ALL_BEHAVIORS:
-            vec_path = get_vector_path(behavior, layer, get_model_path(model_size, is_base=is_base))
+            vec_path = get_vector_path(behavior, layer, get_model_path(model_size, is_base=is_base, model_type=model_type))
             vec = t.load(vec_path)
             norm = vec.norm().item()
             vecs[behavior] = vec
@@ -34,6 +34,7 @@ def normalize_vectors(model_size: str, is_base: bool, n_layers: int):
     
     
 if __name__ == "__main__":
-    normalize_vectors("7b", True, 32)
-    normalize_vectors("7b", False, 32)
-    normalize_vectors("13b", False, 36)
+    normalize_vectors("2b", False, 18, "gemma_1")
+    normalize_vectors("7b", True, 32, "llama")
+    normalize_vectors("7b", False, 32, "llama")
+    normalize_vectors("13b", False, 36, "llama")

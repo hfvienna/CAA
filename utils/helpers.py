@@ -63,11 +63,17 @@ def make_tensor_save_suffix(layer, model_name_path):
     return f'{layer}_{model_name_path.split("/")[-1]}'
 
 
-def get_model_path(size: str, is_base: bool):
-    if is_base:
+def get_model_path(size: str, is_base: bool, model_type: str):
+    if is_base and model_type == "llama":
         return f"meta-llama/Llama-2-{size}-hf"
+    # hfvienna is_base override
+    elif model_type == "gemma_1":
+        return f"google/gemma-{size}"
     else:
-        return f"meta-llama/Llama-2-{size}-chat-hf"
+        print("Model path not found.")
+        return None
+    #else:
+    #    return f"meta-llama/Llama-2-{size}-chat-hf"
 
 def model_name_format(name: str) -> str:
     name = name.lower()
