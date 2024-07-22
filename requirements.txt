@@ -78,7 +78,7 @@ pydantic==2.6.1
 pydantic_core==2.16.2
 Pygments==2.16.1
 pyparsing==3.1.1
-pytest==7.4.2
+pytest
 python-dateutil==2.8.2
 python-dotenv==1.0.0
 pytz==2023.3.post1
@@ -101,7 +101,7 @@ torch==2.0.1
 tornado==6.3.3
 tqdm==4.66.1
 traitlets==5.10.1
-transformers==4.33.2
+transformers
 triton==2.0.0
 typing_extensions==4.8.0
 tzdata==2023.3
