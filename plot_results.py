@@ -24,6 +24,7 @@ def get_data(
     multiplier: int,
     settings: SteeringSettings,
 ) -> Dict[str, Any]:
+    print(f"Multiplier: {multiplier}")
     directory = get_results_dir(settings.behavior)
     if settings.type == "open_ended":
         directory = directory.replace("results", os.path.join("results", "open_ended_scores"))
@@ -486,6 +487,7 @@ def steering_settings_from_args(args, behavior: str) -> SteeringSettings:
     steering_settings.override_vector_model = args.override_vector_model
     steering_settings.use_base_model = args.use_base_model
     steering_settings.model_size = args.model_size
+    steering_settings.model_type = args.model_type
     if len(args.override_weights) > 0:
         steering_settings.override_model_weights_path = args.override_weights[0]
     return steering_settings

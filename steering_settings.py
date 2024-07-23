@@ -13,6 +13,7 @@ class SteeringSettings:
     use_base_model: bool = False
     model_size: str = "7b"
     override_model_weights_path: Optional[str] = None
+    model_type: Optional[str] = None
 
     def __post_init__(self):
         assert self.behavior in ALL_BEHAVIORS, f"Invalid behavior {self.behavior}"
@@ -69,13 +70,14 @@ class SteeringSettings:
         return [os.path.join(directory, f) for f in matching_files]
     
     def get_formatted_model_name(self):
+        print(self.use_base_model, self.model_size, self.model_type)
         if self.use_base_model:
             if self.model_size == "7b":
-                return "Llama 2 7B"
+                return "Llama 2 7B Base"
             if self.model_size == "2b" and self.model_type == "gemma_1":
-                return "Gemma 1 2B"
+                return "Gemma 1 2B Base"
             else:
-                return "Llama 2 13B"
+                return "Llama 2 13B Base"
         else:
             if self.model_size == "7b":
                 return "Llama 2 7B Chat"
