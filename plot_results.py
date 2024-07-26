@@ -356,7 +356,7 @@ def plot_effect_on_behaviors(
     layer: int, multipliers: List[int], behaviors: List[str], settings: SteeringSettings, title: str = None   
 ):
     plt.clf()
-    plt.figure(figsize=(9, 3)) #hfvienna changed from 3 to 9
+    plt.figure(figsize=(6, 3)) #hfvienna use width 6 for multipliers -1 to 1 and 9 for multipliers -5 to 5 
     multiplier_range = f"{min(multipliers)}to{max(multipliers)}"
     save_to = os.path.join(
         ANALYSIS_PATH,
@@ -402,7 +402,8 @@ def plot_effect_on_behaviors(
     elif settings.type == "truthful_qa":
         ylabel = "p(correct answer to A/B question)"
     plt.ylabel(ylabel)
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.) #update to avoid overlay
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    # hfvienna plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.) use bbox_to_anchor=(1.05, 1) for width 9
     plt.tight_layout()
     plt.savefig(save_to, format="png")
     plt.savefig(save_to.replace("png", "svg"), format="svg")
