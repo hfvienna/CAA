@@ -82,7 +82,7 @@ def plot_ab_results_for_layer(
         f"{settings.make_result_save_suffix(layer=layer)}.png",
     )
     plt.clf()
-    plt.figure(figsize=(3.5, 3.5))
+    plt.figure(figsize=(10, 3.5)) #hfvienna changed from 3.5 to 10
     all_results = {}
     for system_prompt, label in system_prompt_options:
         settings.system_prompt = system_prompt
@@ -356,10 +356,11 @@ def plot_effect_on_behaviors(
     layer: int, multipliers: List[int], behaviors: List[str], settings: SteeringSettings, title: str = None   
 ):
     plt.clf()
-    plt.figure(figsize=(3, 3))
+    plt.figure(figsize=(9, 3)) #hfvienna changed from 3 to 9
+    multiplier_range = f"{min(multipliers)}to{max(multipliers)}"
     save_to = os.path.join(
         ANALYSIS_PATH,
-        f"{settings.make_result_save_suffix(layer=layer)}.png",
+        f"layer={layer}_behaviors=multiple_type={settings.type}_multipliers={multiplier_range}_model_type={settings.model_type}_model_size={settings.model_size}_use_base_model={settings.use_base_model}.png",
     )
     all_results = []
     for behavior in behaviors:
@@ -389,8 +390,9 @@ def plot_effect_on_behaviors(
             label=HUMAN_NAMES[behavior],
         )
     plt.xticks(ticks=multipliers, labels=multipliers)
-    if title is not None:
-        plt.title(title)
+    if title is None:
+        title = f"Layer {layer} - {settings.get_formatted_model_name()}"
+    plt.title(title, fontsize=12)
     plt.xlabel("Steering vector multiplier")
     ylabel = "p(answer matching behavior) (%)"
     if settings.type == "open_ended":
@@ -400,7 +402,7 @@ def plot_effect_on_behaviors(
     elif settings.type == "truthful_qa":
         ylabel = "p(correct answer to A/B question)"
     plt.ylabel(ylabel)
-    plt.legend()
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.) #update to avoid overlay
     plt.tight_layout()
     plt.savefig(save_to, format="png")
     plt.savefig(save_to.replace("png", "svg"), format="svg")
