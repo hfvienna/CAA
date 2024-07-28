@@ -403,7 +403,8 @@ def plot_effect_on_behaviors(
         ylabel = "p(correct answer to A/B question)"
     plt.ylabel(ylabel)
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-    # hfvienna plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.) use bbox_to_anchor=(1.05, 1) for width 9
+    # hfvienna use bbox_to_anchor=(1.05, 1) for width 9:
+    #plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     plt.tight_layout()
     plt.savefig(save_to, format="png")
     plt.savefig(save_to.replace("png", "svg"), format="svg")
