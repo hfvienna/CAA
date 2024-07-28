@@ -7,18 +7,23 @@ import os
 from behaviors import get_vector_path
 from behaviors import COORDINATE, ALL_BEHAVIORS, get_vector_path
 from behaviors import BASE_DIR, COORDINATE, ALL_BEHAVIORS, get_vector_path
+import random
+import json
+import numpy as np
 
 HUGGINGFACE_TOKEN = os.environ.get('HUGGINGFACE_TOKEN')
 
 def decompose_caa_vector(sae, caa_vector, top_k=20):
-    caa_vector = caa_vector.to(next(sae.parameters()).device).view(1, -1)
+    caa_vector = caa_vector.to(sae.W_enc.device).view(1, -1)
     
     with torch.no_grad():
         sparse_features = sae.encode(caa_vector)
     
-    top_values, top_indices = torch.topk(sparse_features.abs().squeeze(), k=top_k)
-    
-    top_features = {idx.item(): val.item() for idx, val in zip(top_indices, top_values)}
+    top_features = dict(sorted(
+        {i: v.item() for i, v in enumerate(sparse_features.squeeze())}.items(),
+        key=lambda x: abs(x[1]),
+        reverse=True
+    )[:top_k])
     
     feature_contributions = {}
     for idx, activation in top_features.items():
@@ -27,6 +32,7 @@ def decompose_caa_vector(sae, caa_vector, top_k=20):
         feature_contributions[idx] = contribution
     
     sparse_reconstruction = torch.zeros_like(sparse_features)
+    top_indices = list(top_features.keys())
     sparse_reconstruction[0, top_indices] = sparse_features[0, top_indices]
     with torch.no_grad():
         reconstructed = sae.decode(sparse_reconstruction)
@@ -35,19 +41,49 @@ def decompose_caa_vector(sae, caa_vector, top_k=20):
     
     return top_features, feature_contributions, reconstructed.squeeze(), reconstruction_error.item()
 
-def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b'):
-    vector_path = get_vector_path(behavior, layer, model_name_path)
-    caa_vector = torch.load(vector_path)
+def generate_behavior_curve(model, vector, multipliers=[-1, -0.5, 0, 0.5, 1]):
+    results = []
+    for multiplier in multipliers:
+        scaled_vector = vector * multiplier
+        output = model.get_behavior_from_vector(scaled_vector)
+        # Extract a numerical value from the output
+        value = extract_numerical_value(output)
+        results.append(value)
+    return results
+
+def extract_numerical_value(output):
+    # The output is already a numerical value (average log probability)
+    return output
+
+def fix_vector_path(path):
+    # Remove duplicate 'vec_layer_' if present
+    if path.count('vec_layer_') > 1:
+        parts = path.split('vec_layer_')
+        path = os.path.join(os.path.dirname(path), f"vec_layer_{parts[-1]}")
     
+    # Remove duplicate '.pt' extension if present
+    if path.endswith('.pt.pt'):
+        path = path[:-3]
+    
+    return path
+
+def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b'):
+    vector_path = fix_vector_path(get_vector_path(behavior, layer, model_name_path))
+    normalized_dir = os.path.join(BASE_DIR, 'normalized_vectors', behavior)
+
+    # Load the existing normalized vector
+    original_path = fix_vector_path(os.path.join(normalized_dir, f"vec_layer_{layer}_{model_name_path}.pt"))
+    caa_vector = torch.load(original_path)
+
     print(f"Analyzing vector for behavior: {behavior}")
     print(f"Vector shape: {caa_vector.shape}")
-    
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
-    
-    # Move caa_vector to CUDA
+
+    # Move caa_vector to device
     caa_vector = caa_vector.to(device)
-    
+
     # Load the SAE model
     sae_layer_use = layer
     sae, cfg_dict, _ = SAE.from_pretrained(
@@ -55,66 +91,98 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b'):
         sae_id=f"blocks.{sae_layer_use}.hook_resid_post"
     )
     sae = sae.to(device)
-    
+
     # Get hook point
     hook_point = sae.cfg.hook_name
     print(f"Hook point: {hook_point}")
-    
+
     # Decompose the CAA vector
     top_features, feature_contributions, reconstructed, error = decompose_caa_vector(sae, caa_vector)
-    
-    # Print results
-    print("Top SAE features for CAA vector:")
-    for rank, (idx, activation) in enumerate(top_features.items(), 1):
-        contribution = feature_contributions[idx].to(device)
-        contribution_magnitude = torch.norm(contribution).item()
-        contribution_direction = torch.cosine_similarity(caa_vector.squeeze(), contribution.squeeze(), dim=0).item()
-        print(f"Rank {rank}: Feature {idx}")
-        print(f"  Activation: {activation:.4f}")
-        print(f"  Contribution Magnitude: {contribution_magnitude:.4f}")
-        print(f"  Contribution Direction (cosine similarity): {contribution_direction:.4f}")
-    
-    print(f"\nReconstruction error: {error:.6f}")
-    
-    # Visualize the reconstruction and top feature contributions
-    plt.figure(figsize=(12, 6))
-    plt.plot(caa_vector.cpu().detach().numpy().squeeze(), label='Original CAA Vector', alpha=0.7)
-    plt.plot(reconstructed.cpu().detach().numpy(), label='Reconstructed from SAE', alpha=0.7)
-    
-    # Plot top 5 feature contributions
-    for i, (idx, contribution) in enumerate(list(feature_contributions.items())[:5]):
-        plt.plot(contribution.cpu().detach().numpy(), label=f'Feature {idx} Contribution', alpha=0.5)
-    
-    plt.legend()
-    plt.title(f'CAA Vector, Reconstruction, and Top Feature Contributions for {behavior}')
-    plt.savefig(f'{behavior}_reconstruction.png')
-    plt.close()
-    
-    # Visualize cumulative explained variance
-    cumulative_contribution = torch.zeros_like(caa_vector.squeeze())
-    explained_variances = []
-    for contribution in feature_contributions.values():
-        cumulative_contribution += contribution
-        explained_variance = 1 - torch.nn.functional.mse_loss(cumulative_contribution, caa_vector.squeeze()) / torch.var(caa_vector.squeeze())
-        explained_variances.append(explained_variance.item())
-    
-    plt.figure(figsize=(10, 5))
-    plt.plot(range(1, len(explained_variances) + 1), explained_variances)
-    plt.xlabel('Number of Features')
-    plt.ylabel('Cumulative Explained Variance')
-    plt.title(f'Cumulative Explained Variance by Top SAE Features for {behavior}')
-    plt.savefig(f'{behavior}_explained_variance.png')
-    plt.close()
-    
-    print(f"Analysis complete for {behavior}")
-    print(f"Hook point: {hook_point}")
 
+    # Save top 5 feature vectors in normalized_vectors folder
+    for idx in list(top_features.keys())[:5]:
+        feature_vector = feature_contributions[idx]
+        feature_path = fix_vector_path(os.path.join(normalized_dir, f"vec_layer_{layer}_{model_name_path}_feature_{idx}.pt"))
+        torch.save(feature_vector, feature_path)
+
+    print(f"Saved top 5 feature vectors in {normalized_dir}")
+    print("To process these vectors, run:")
+    print(f"python prompting_with_steering.py --layers $(seq {layer-1} {layer+1}) --multipliers -0.5 0 0.5 --type ab --model_size 2b --model_type gemma_1 --use_base_model")
+    print("Then, to plot the results, run:")
+    print(f"python plot_results.py --layers {layer} --multipliers -1 -0.5 0 0.5 1 --type ab --model_type gemma_1 --model_size 2b --use_base_model")
+
+    # Run steering analysis for the original vector and top 5 feature vectors
+    print("Running steering analysis for the original vector and top 5 feature vectors...")
+    for idx in ['original'] + list(top_features.keys())[:5]:
+        if idx == 'original':
+            vector_path = original_path
+        else:
+            vector_path = os.path.join(normalized_dir, f"vec_layer_{layer}_{model_name_path}_feature_{idx}.pt")
+        
+        command = f"python prompting_with_steering.py --layers $(seq {layer-1} {layer+1}) --multipliers -0.5 0 0.5 --type ab --model_size 2b --model_type gemma_1 --use_base_model --behavior {behavior} --override_vector_model {vector_path}"
+        print(f"Running command: {command}")
+        os.system(command)
+
+    print("Steering analysis complete. Results saved in the results folder.")
+    print(f"normalized_dir: {normalized_dir}")
+    print(f"original_path: {original_path}")
+    print(f"vector_path: {vector_path}")
+    print(f"Example feature path: {os.path.join(normalized_dir, f'vec_layer_{layer}_{model_name_path}_feature_3881.pt')}")
+    
+    # Plot the steering results
+    plot_steering_results(behavior, layer, model_name_path)
+    
+    return top_features
+
+def plot_steering_results(behavior, layer=10, model_name_path='gemma-2b'):
+    results_dir = os.path.join(BASE_DIR, 'results', behavior)
+    multipliers = [-0.5, 0, 0.5]
+    
+    plt.figure(figsize=(12, 8))
+    
+    # Plot original vector results
+    original_file = os.path.join(results_dir, f"vec_layer_{layer}_{model_name_path}.json")
+    with open(original_file, 'r') as f:
+        original_data = json.load(f)
+    plt.plot(multipliers, original_data['results'], label='Original', linewidth=2, color='black')
+    
+    # Plot feature vector results
+    colors = plt.cm.rainbow(np.linspace(0, 1, 5))
+    for i, feature_idx in enumerate(list(top_features.keys())[:5]):
+        feature_file = os.path.join(results_dir, f"vec_layer_{layer}_{model_name_path}_feature_{feature_idx}.json")
+        with open(feature_file, 'r') as f:
+            feature_data = json.load(f)
+        plt.plot(multipliers, feature_data['results'], label=f'Feature {feature_idx}', linewidth=2, color=colors[i])
+    
+    plt.xlabel('Multiplier')
+    plt.ylabel('Behavior Score')
+    plt.title(f'Steering Results for {behavior.capitalize()} (Layer {layer})')
+    plt.legend()
+    plt.grid(True)
+    
+    output_dir = os.path.join(BASE_DIR, 'plots')
+    os.makedirs(output_dir, exist_ok=True)
+    plt.savefig(os.path.join(output_dir, f'{behavior}_layer_{layer}_steering_results.png'))
+    plt.close()
+    
+    print(f"Plot saved to {output_dir}/{behavior}_layer_{layer}_steering_results.png")
+
+def print_top_10_features(behavior, layer=10, model_name_path='gemma-2b'):
+    top_features = analyze_gemma_vector(behavior, layer, model_name_path)
+    print(f"\nTop 10 features for '{behavior}' in layer {layer}:")
+    for rank, (idx, activation) in enumerate(list(top_features.items())[:10], 1):
+        print(f"{rank}. Feature {idx}: Activation {activation:.4f}")
 
 if __name__ == "__main__":
     import sys
     from behaviors import COORDINATE, ALL_BEHAVIORS
+
     if len(sys.argv) > 1 and sys.argv[1] in ALL_BEHAVIORS:
         behavior = sys.argv[1]
     else:
         behavior = COORDINATE
-    analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b')
+
+    layer = 10 if len(sys.argv) <= 2 else int(sys.argv[2])
+    model_name_path = 'gemma-2b' if len(sys.argv) <= 3 else sys.argv[3]
+
+    print_top_10_features(behavior, layer, model_name_path)

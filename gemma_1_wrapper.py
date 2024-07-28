@@ -287,3 +287,31 @@ class Gemma1Wrapper:
         probs_percent = [int(v * 100) for v in values.tolist()]
         tokens = self.tokenizer.batch_decode(indices.unsqueeze(-1))
         return list(zip(tokens, probs_percent)), list(zip(tokens, values.tolist()))
+
+#hfvienna test
+    def get_behavior_from_vector(self, vector):
+        # Ensure the vector is on the correct device and is a float tensor
+        vector = vector.to(self.device).float()
+        
+        # Reshape the vector to match the expected input shape (batch_size, sequence_length, hidden_size)
+        batch_size, hidden_size = 1, vector.size(-1)
+        inputs_embeds = vector.view(batch_size, 1, hidden_size)
+        
+        # Generate output from the vector
+        with t.no_grad():
+            outputs = self.model.generate(
+                inputs_embeds=inputs_embeds,
+                max_new_tokens=50,
+                top_k=1,
+                return_dict_in_generate=True,
+                output_scores=True
+            )
+        
+        # Decode the output
+        decoded_output = self.tokenizer.decode(outputs.sequences[0], skip_special_tokens=True)
+        
+        # Calculate a numerical value based on the output (e.g., average log probability)
+        log_probs = t.stack(outputs.scores, dim=1).log_softmax(-1)
+        avg_log_prob = log_probs.max(-1).values.mean().item()
+        
+        return avg_log_prob
