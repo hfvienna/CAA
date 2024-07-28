@@ -10,6 +10,7 @@ from behaviors import BASE_DIR, COORDINATE, ALL_BEHAVIORS, get_vector_path
 import random
 import json
 import numpy as np
+import time
 
 HUGGINGFACE_TOKEN = os.environ.get('HUGGINGFACE_TOKEN')
 
@@ -109,7 +110,7 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b'):
     print("To process these vectors, run:")
     print(f"python prompting_with_steering.py --layers $(seq {layer-1} {layer+1}) --multipliers -0.5 0 0.5 --type ab --model_size 2b --model_type gemma_1 --use_base_model")
     print("Then, to plot the results, run:")
-    print(f"python plot_results.py --layers {layer} --multipliers -1 -0.5 0 0.5 1 --type ab --model_type gemma_1 --model_size 2b --use_base_model")
+    print(f"python plot_results.py --layers {layer} --multipliers -1 -0.5 0 0.5 1 --type ab --model_type gemma_1 --model_size 2b --use_base_model --behavior {behavior}")
 
     # Run steering analysis for the original vector and top 5 feature vectors
     print("Running steering analysis for the original vector and top 5 feature vectors...")
@@ -124,48 +125,16 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b'):
         os.system(command)
 
     print("Steering analysis complete. Results saved in the results folder.")
-    print(f"normalized_dir: {normalized_dir}")
-    print(f"original_path: {original_path}")
-    print(f"vector_path: {vector_path}")
-    print(f"Example feature path: {os.path.join(normalized_dir, f'vec_layer_{layer}_{model_name_path}_feature_3881.pt')}")
-    
-    # Plot the steering results
-    plot_steering_results(behavior, layer, model_name_path)
-    
-    return top_features
 
-def plot_steering_results(behavior, layer=10, model_name_path='gemma-2b'):
-    results_dir = os.path.join(BASE_DIR, 'results', behavior)
-    multipliers = [-0.5, 0, 0.5]
-    
-    plt.figure(figsize=(12, 8))
-    
-    # Plot original vector results
-    original_file = os.path.join(results_dir, f"vec_layer_{layer}_{model_name_path}.json")
-    with open(original_file, 'r') as f:
-        original_data = json.load(f)
-    plt.plot(multipliers, original_data['results'], label='Original', linewidth=2, color='black')
-    
-    # Plot feature vector results
-    colors = plt.cm.rainbow(np.linspace(0, 1, 5))
-    for i, feature_idx in enumerate(list(top_features.keys())[:5]):
-        feature_file = os.path.join(results_dir, f"vec_layer_{layer}_{model_name_path}_feature_{feature_idx}.json")
-        with open(feature_file, 'r') as f:
-            feature_data = json.load(f)
-        plt.plot(multipliers, feature_data['results'], label=f'Feature {feature_idx}', linewidth=2, color=colors[i])
-    
-    plt.xlabel('Multiplier')
-    plt.ylabel('Behavior Score')
-    plt.title(f'Steering Results for {behavior.capitalize()} (Layer {layer})')
-    plt.legend()
-    plt.grid(True)
-    
-    output_dir = os.path.join(BASE_DIR, 'plots')
-    os.makedirs(output_dir, exist_ok=True)
-    plt.savefig(os.path.join(output_dir, f'{behavior}_layer_{layer}_steering_results.png'))
-    plt.close()
-    
-    print(f"Plot saved to {output_dir}/{behavior}_layer_{layer}_steering_results.png")
+    # Plot the steering results
+    print("Plotting steering results...")
+    command = f"python plot_results.py --layers {layer} --multipliers -1 -0.5 0 0.5 1 --type ab --model_type gemma_1 --model_size 2b --use_base_model --behavior {behavior}"
+    print(f"Running command: {command}")
+    os.system(command)
+
+    print("Plotting complete. Results saved in the plots folder.")
+
+    return top_features
 
 def print_top_10_features(behavior, layer=10, model_name_path='gemma-2b'):
     top_features = analyze_gemma_vector(behavior, layer, model_name_path)
