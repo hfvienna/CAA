@@ -71,72 +71,63 @@ def get_avg_key_prob(results: Dict[str, Any], key: str) -> float:
 def plot_ab_results_for_layer(
     layer: int, multipliers: List[float], settings: SteeringSettings
 ):
+    system_prompt_options = [
+        ("pos", f"Positive system prompt"),
+        ("neg", f"Negative system prompt"),
+        (None, f"No system prompt"),
+    ]
+    settings.system_prompt = None
     save_to = os.path.join(
         get_analysis_dir(settings.behavior),
         f"{settings.make_result_save_suffix(layer=layer)}.png",
     )
     plt.clf()
-    plt.figure(figsize=(12, 8))
-    
-    results_dir = get_results_dir(settings.behavior)
-    feature_files = [f for f in os.listdir(results_dir) if f.startswith(f"results_layer={layer}_multiplier=") and f"behavior={settings.behavior}" in f]
-    
-    if not feature_files:
-        print(f"No result files found for behavior '{settings.behavior}' in layer {layer}")
-        return
-
-    features = set([f.split('override_vector_model=')[-1].split('_')[0].split('-')[-1] for f in feature_files])
-    colors = plt.cm.rainbow(np.linspace(0, 1, len(features)))
-    feature_data = defaultdict(list)
-
-    for file in feature_files:
-        file_path = os.path.join(results_dir, file)
-        multiplier = float(file.split("multiplier=")[1].split("_")[0])
-        feature = file.split('override_vector_model=')[-1].split('_')[0].split('-')[-1]
-        
-        with open(file_path, 'r') as f:
-            data = json.load(f)
-        
-        avg_prob = get_avg_key_prob(data, "answer_matching_behavior")
-        feature_data[feature].append((multiplier, avg_prob))
-
-    for i, (feature, data_points) in enumerate(feature_data.items()):
-        data_points.sort(key=lambda x: x[0])
-        x, y = zip(*data_points)
-        label = "Original" if feature == "gemma-2b" else f"Feature {feature}"
-        plt.plot(x, y, label=label, linewidth=2, color=colors[i], marker='o')
-
-    plt.xlabel("Multiplier")
-    plt.ylabel("Probability of answer matching behavior")
-    plt.title(f"Steering Results for {settings.behavior.capitalize()} (Layer {layer})")
+    plt.figure(figsize=(10, 3.5)) #hfvienna changed from 3.5 to 10
+    all_results = {}
+    for system_prompt, label in system_prompt_options:
+        settings.system_prompt = system_prompt
+        try:
+            res_list = []
+            for multiplier in multipliers:
+                results = get_data(layer, multiplier, settings)
+                avg_key_prob = get_avg_key_prob(results, "answer_matching_behavior")
+                res_list.append((multiplier, avg_key_prob))
+            res_list.sort(key=lambda x: x[0])
+            plt.plot(
+                [x[0] for x in res_list],
+                [x[1] for x in res_list],
+                label=label,
+                marker="o",
+                linestyle="solid",
+                markersize=10,
+                linewidth=3,
+            )
+            all_results[system_prompt] = res_list
+        except:
+            print(f"[WARN] Missing data for system_prompt={system_prompt} for layer={layer}")
     plt.legend()
-    plt.grid(True)
-    plt.xticks(multipliers)
+    plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.0%}"))
+    plt.xlabel("Multiplier")
+    plt.ylabel("p(answer matching behavior)")
+    plt.xticks(ticks=multipliers, labels=multipliers)
+    if (settings.override_vector is None) and (settings.override_vector_model is None) and (settings.override_model_weights_path is None):
+        plt.title(f"{HUMAN_NAMES[settings.behavior]} - {settings.get_formatted_model_name()}", fontsize=11)
     plt.tight_layout()
     plt.savefig(save_to, format="png")
-    print(f"Plot saved to {save_to}")
-
-    # Save individual plots for each feature
-    for i, (feature, data_points) in enumerate(feature_data.items()):
-        plt.clf()
-        plt.figure(figsize=(10, 6))
-        data_points.sort(key=lambda x: x[0])
-        x, y = zip(*data_points)
-        label = "Original" if feature == "gemma-2b" else f"Feature {feature}"
-        plt.plot(x, y, label=label, linewidth=2, color=colors[i], marker='o')
-        plt.xlabel("Multiplier")
-        plt.ylabel("Probability of answer matching behavior")
-        plt.title(f"Steering Results for {settings.behavior.capitalize()} (Layer {layer}, {label})")
-        plt.legend()
-        plt.grid(True)
-        plt.xticks(multipliers)
-        plt.tight_layout()
-        feature_save_to = os.path.join(
-            get_analysis_dir(settings.behavior),
-            f"{settings.make_result_save_suffix(layer=layer)}_{feature}.png"
-        )
-        plt.savefig(feature_save_to, format="png")
-        print(f"Plot saved to {feature_save_to}")
+    # Save data in all_results used for plotting as .txt
+    with open(save_to.replace(".png", ".txt"), "w") as f, open(save_to.replace(".png", ".tex"), "w") as f_tex:
+        for system_prompt, res_list in all_results.items():
+            for multiplier, score in res_list:
+                f.write(f"{system_prompt}\t{multiplier}\t{score}\n")
+        if len(all_results) != 3:
+            return
+        try:
+            none_results = dict(all_results[None])[-1], dict(all_results[None])[0], dict(all_results[None])[1]
+            pos_results = dict(all_results["pos"])[-1], dict(all_results["pos"])[0], dict(all_results["pos"])[1]
+            neg_results = dict(all_results["neg"])[-1], dict(all_results["neg"])[0], dict(all_results["neg"])[1]
+            f_tex.write(f"{HUMAN_NAMES[settings.behavior]} & {none_results[0]:.2f} & {none_results[1]:.2f} & {none_results[2]:.2f} & {pos_results[0]:.2f} & {pos_results[1]:.2f} & {pos_results[2]:.2f} & {neg_results[0]:.2f} & {neg_results[1]:.2f} & {neg_results[2]:.2f}")
+        except KeyError:
+            pass
 
 def plot_finetuning_openended_comparison(settings: SteeringSettings, finetune_pos_path: str, finetune_neg_path: str, multipliers: list[float], layer: int):
     save_to = os.path.join(
@@ -362,43 +353,66 @@ def plot_ab_data_per_layer(
             f.write("\n")
 
 def plot_effect_on_behaviors(
-    layer: int,
-    multipliers: List[float],
-    behaviors: List[str],
-    settings: SteeringSettings,
-    title: str = None,
+    layer: int, multipliers: List[int], behaviors: List[str], settings: SteeringSettings, title: str = None   
 ):
+    plt.clf()
+    plt.figure(figsize=(6, 3)) #hfvienna use width 6 for multipliers -1 to 1 and 9 for multipliers -5 to 5 
+    multiplier_range = f"{min(multipliers)}to{max(multipliers)}"
     save_to = os.path.join(
         ANALYSIS_PATH,
-        f"effect_on_behaviors_layer_{layer}_{settings.make_result_save_suffix()}.png",
+        f"layer={layer}_behaviors=multiple_type={settings.type}_multipliers={multiplier_range}_model_type={settings.model_type}_model_size={settings.model_size}_use_base_model={settings.use_base_model}.png",
     )
-    plt.clf()
-    plt.figure(figsize=(10, 6))
-
+    all_results = []
     for behavior in behaviors:
-        settings.behavior = behavior
-        res_list = []
-        for multiplier in multipliers:
-            data = get_data(layer, multiplier, settings)
-            if data:
+        results = []
+        for mult in multipliers:
+            settings.behavior = behavior
+            data = get_data(layer, mult, settings)
+            if settings.type == "open_ended":
+                avg_score = get_avg_score(data)
+                results.append(avg_score)
+            elif settings.type == "ab":
                 avg_key_prob = get_avg_key_prob(data, "answer_matching_behavior")
-                res_list.append(avg_key_prob)
+                results.append(avg_key_prob * 100)
             else:
-                res_list.append(None)
-        
-        valid_points = [(m, r) for m, r in zip(multipliers, res_list) if r is not None]
-        if valid_points:
-            x, y = zip(*valid_points)
-            plt.plot(x, y, label=HUMAN_NAMES[behavior])
+                avg_key_prob = get_avg_key_prob(data, "correct")
+                results.append(avg_key_prob * 100)
+        all_results.append(results)
 
-    plt.xlabel("Multiplier")
-    plt.ylabel("Probability of answer matching behavior")
-    plt.title(title or f"Effect on behaviors: {settings.get_formatted_model_name()}")
-    plt.legend()
-    plt.grid(True)
+    for idx, behavior in enumerate(behaviors):
+        plt.plot(
+            multipliers,
+            all_results[idx],
+            marker="o",
+            linestyle="solid",
+            markersize=10,
+            linewidth=3,
+            label=HUMAN_NAMES[behavior],
+        )
+    plt.xticks(ticks=multipliers, labels=multipliers)
+    if title is None:
+        title = f"Layer {layer} - {settings.get_formatted_model_name()}"
+    plt.title(title, fontsize=12)
+    plt.xlabel("Steering vector multiplier")
+    ylabel = "p(answer matching behavior) (%)"
+    if settings.type == "open_ended":
+        ylabel = "Mean behavioral score (/10)"
+    elif settings.type == "mmlu":
+        ylabel = "p(correct answer to A/B question)"
+    elif settings.type == "truthful_qa":
+        ylabel = "p(correct answer to A/B question)"
+    plt.ylabel(ylabel)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    # hfvienna plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.) use bbox_to_anchor=(1.05, 1) for width 9
     plt.tight_layout()
     plt.savefig(save_to, format="png")
-    print(f"Plot saved to {save_to}")
+    plt.savefig(save_to.replace("png", "svg"), format="svg")
+    with open(save_to.replace(".png", ".txt"), "w") as f:
+        for mult in multipliers:
+            f.write(f"{mult}\t")
+            for idx, behavior in enumerate(behaviors):
+                f.write(f"{all_results[idx]}\t")
+            f.write("\n")
 
 def plot_layer_sweeps(
     layers: List[int], behaviors: List[str], settings: SteeringSettings, title: str = None
