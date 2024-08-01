@@ -23,9 +23,13 @@ def normalize_vectors(model_size: str, is_base: bool, n_layers: int, model_type:
             new_paths[behavior] = new_path
         print(norms)
         mean_norm = t.tensor(list(norms.values())).mean().item()
+        print(f"Mean norm: {mean_norm}")
         # normalize all vectors to have the same norm
         for behavior in ALL_BEHAVIORS:
             vecs[behavior] = vecs[behavior] * mean_norm / norms[behavior]
+        print("Normalized norms:")
+        for behavior in ALL_BEHAVIORS:
+            print(f"{behavior}: {vecs[behavior].norm().item()}")
         # save the normalized vectors
         for behavior in ALL_BEHAVIORS:
             if not os.path.exists(os.path.dirname(new_paths[behavior])):
@@ -34,7 +38,14 @@ def normalize_vectors(model_size: str, is_base: bool, n_layers: int, model_type:
     
     
 if __name__ == "__main__":
-    normalize_vectors("2b", False, 18, "gemma_1")
-    normalize_vectors("7b", True, 32, "llama")
-    normalize_vectors("7b", False, 32, "llama")
-    normalize_vectors("13b", False, 36, "llama")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Normalize vectors for a specific model type and size.")
+    parser.add_argument("--model_size", type=str, required=True, help="Model size (e.g., '2b', '7b', '13b')")
+    parser.add_argument("--model_type", type=str, required=True, help="Model type (e.g., 'gemma_1', 'llama')")
+    parser.add_argument("--is_base", action="store_true", help="Whether it's a base model")
+    parser.add_argument("--n_layers", type=int, required=True, help="Number of layers in the model")
+
+    args = parser.parse_args()
+
+    normalize_vectors(args.model_size, args.is_base, args.n_layers, args.model_type)
