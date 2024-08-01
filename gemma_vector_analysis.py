@@ -1,16 +1,15 @@
-import torch
+import json
 import matplotlib.pyplot as plt
+import numpy as np
+import os
+import random
+import time
+import torch
+
+from behaviors import ALL_BEHAVIORS, BASE_DIR, COORDINATE, get_vector_path
 from gemma_1_wrapper import Gemma1Wrapper
 from generate_vectors import generate_save_vectors_for_behavior
 from sae_lens import SAE
-import os
-from behaviors import get_vector_path
-from behaviors import COORDINATE, ALL_BEHAVIORS, get_vector_path
-from behaviors import BASE_DIR, COORDINATE, ALL_BEHAVIORS, get_vector_path
-import random
-import json
-import numpy as np
-import time
 
 HUGGINGFACE_TOKEN = os.environ.get('HUGGINGFACE_TOKEN')
 
