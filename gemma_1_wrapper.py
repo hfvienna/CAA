@@ -154,6 +154,10 @@ class Gemma1Wrapper:
         for layer in self.model.model.layers:
             layer.save_internal_decodings = value
 
+    def to(self, device):
+        self.model.to(device)
+        return self
+
     def set_from_positions(self, pos: int):
         for layer in self.model.model.layers:
             layer.from_position = pos

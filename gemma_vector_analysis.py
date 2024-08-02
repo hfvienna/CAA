@@ -12,6 +12,7 @@ from generate_vectors import generate_save_vectors_for_behavior
 from sae_lens import SAE
 
 HUGGINGFACE_TOKEN = os.environ.get('HUGGINGFACE_TOKEN')
+TOP_K_FEATURES = 100
 
 def decompose_caa_vector(sae, caa_vector, top_k=20):
     caa_vector = caa_vector.to(sae.W_enc.device).view(1, -1)
@@ -67,7 +68,8 @@ def fix_vector_path(path):
     
     return path
 
-def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b'):
+def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b', only_combined_vector=False):
+    global TOP_K_FEATURES
     vector_path = fix_vector_path(get_vector_path(behavior, layer, model_name_path))
     normalized_dir = os.path.join(BASE_DIR, 'normalized_vectors', behavior)
 
@@ -84,6 +86,8 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b'):
     # Move caa_vector to device
     caa_vector = caa_vector.to(device)
 
+    print(f"Norm of the original vector: {caa_vector.norm().item():.4f}")
+
     # Load the SAE model
     sae_layer_use = layer
     sae, cfg_dict, _ = SAE.from_pretrained(
@@ -92,6 +96,10 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b'):
     )
     sae = sae.to(device)
 
+    # Calculate and print the norm for all features
+    all_features_norm = torch.norm(sae.W_dec, dim=1)
+    print(f"Norm of all features: {all_features_norm.mean().item():.4f} (mean), {all_features_norm.min().item():.4f} (min), {all_features_norm.max().item():.4f} (max)")
+
     # Get hook point
     hook_point = sae.cfg.hook_name
     print(f"Hook point: {hook_point}")
@@ -99,21 +107,149 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b'):
     # Decompose the CAA vector
     top_features, feature_contributions, reconstructed, error = decompose_caa_vector(sae, caa_vector)
 
-    # Save top 5 feature vectors in normalized_vectors folder
-    for idx in list(top_features.keys())[:5]:
+    if only_combined_vector:
+        # Combine top features
+        combined_vector = torch.zeros_like(caa_vector)
+        for idx in list(top_features.keys())[:TOP_K_FEATURES]:
+            combined_vector += feature_contributions[idx]
+
+        # Save the combined vector
+        combined_vector_path = os.path.join(normalized_dir, f"features_top{TOP_K_FEATURES}combined_layer_{layer}_{model_name_path}.pt")
+        torch.save(combined_vector, combined_vector_path)
+        print(f"Saved combined top {TOP_K_FEATURES} features vector to {combined_vector_path}")
+
+        # Calculate and print the norm of the combined vector
+        combined_norm = combined_vector.norm().item()
+        print(f"Norm of combined top {TOP_K_FEATURES} features vector: {combined_norm:.4f}")
+
+        # Calculate and print the cosine similarity
+        cosine_similarity = torch.nn.functional.cosine_similarity(caa_vector.view(1, -1), combined_vector.view(1, -1)).item()
+        print(f"Cosine similarity between original and combined vector: {cosine_similarity:.4f}")
+
+        # Calculate reconstructions
+        full_reconstruction = sae.decode(sae.encode(caa_vector))
+        top_k_reconstruction = torch.zeros_like(caa_vector)
+        for idx in list(top_features.keys())[:TOP_K_FEATURES]:
+            top_k_reconstruction += feature_contributions[idx]
+
+        # 1. Cosine Similarity
+        full_cosine_similarity = torch.nn.functional.cosine_similarity(caa_vector.view(1, -1), full_reconstruction.view(1, -1)).item()
+        top_k_cosine_similarity = torch.nn.functional.cosine_similarity(caa_vector.view(1, -1), top_k_reconstruction.view(1, -1)).item()
+        print(f"Cosine similarity - Full reconstruction: {full_cosine_similarity:.4f}")
+        print(f"Cosine similarity - Top {TOP_K_FEATURES} reconstruction: {top_k_cosine_similarity:.4f}")
+
+        # 2. Norm Comparison
+        original_norm = caa_vector.norm().item()
+        full_reconstruction_norm = full_reconstruction.norm().item()
+        top_k_reconstruction_norm = top_k_reconstruction.norm().item()
+        print(f"Norm - Original: {original_norm:.4f}")
+        print(f"Norm - Full reconstruction: {full_reconstruction_norm:.4f}")
+        print(f"Norm - Top {TOP_K_FEATURES} reconstruction: {top_k_reconstruction_norm:.4f}")
+
+        # 3. Mean Squared Error and Loss Recovered
+        full_mse = torch.nn.functional.mse_loss(caa_vector, full_reconstruction).item()
+        print(f"MSE - Full reconstruction: {full_mse:.4f}")
+
+        # Calculate MSE and Loss Recovered for different numbers of top features
+        feature_counts = [10, 20, 50, 100, 200, 500]
+        for count in feature_counts:
+            top_k_reconstruction = torch.zeros_like(caa_vector)
+            for idx in list(top_features.keys())[:count]:
+                top_k_reconstruction += feature_contributions[idx]
+            top_k_mse = torch.nn.functional.mse_loss(caa_vector, top_k_reconstruction).item()
+            loss_recovered_mse = calculate_loss_recovered(caa_vector, top_k_reconstruction, 'mse')
+            loss_recovered_cosine = calculate_loss_recovered(caa_vector, top_k_reconstruction, 'cosine')
+            print(f"Top {count} reconstruction:")
+            print(f"  MSE: {top_k_mse:.4f}")
+            print(f"  Loss Recovered (MSE): {loss_recovered_mse:.2f}%")
+            print(f"  Loss Recovered (Cosine): {loss_recovered_cosine:.2f}%")
+
+        # Calculate MSE and Loss Recovered for random subsets of features
+        random_counts = [100, 500, 1000]
+        for count in random_counts:
+            random_reconstruction = torch.zeros_like(caa_vector)
+            random_indices = random.sample(list(top_features.keys()), count)
+            for idx in random_indices:
+                random_reconstruction += feature_contributions[idx]
+            random_mse = torch.nn.functional.mse_loss(caa_vector, random_reconstruction).item()
+            loss_recovered_mse = calculate_loss_recovered(caa_vector, random_reconstruction, 'mse')
+            loss_recovered_cosine = calculate_loss_recovered(caa_vector, random_reconstruction, 'cosine')
+            print(f"Random {count} reconstruction:")
+            print(f"  MSE: {random_mse:.4f}")
+            print(f"  Loss Recovered (MSE): {loss_recovered_mse:.2f}%")
+            print(f"  Loss Recovered (Cosine): {loss_recovered_cosine:.2f}%")
+
+        # 4. Cross Entropy Loss
+        model = Gemma1Wrapper(model_name_path)
+        model = model.to(device)
+
+        original_logits = model(caa_vector.unsqueeze(0))
+        full_reconstruction_logits = model(full_reconstruction.unsqueeze(0))
+        top_k_reconstruction_logits = model(top_k_reconstruction.unsqueeze(0))
+
+        criterion = torch.nn.CrossEntropyLoss()
+        target = torch.argmax(original_logits, dim=-1)
+
+        original_loss = criterion(original_logits, target)
+        full_reconstruction_loss = criterion(full_reconstruction_logits, target)
+        top_k_reconstruction_loss = criterion(top_k_reconstruction_logits, target)
+
+        print(f"Cross entropy loss - Original: {original_loss.item():.4f}")
+        print(f"Cross entropy loss - Full reconstruction: {full_reconstruction_loss.item():.4f}")
+        print(f"Cross entropy loss - Top {TOP_K_FEATURES} reconstruction: {top_k_reconstruction_loss.item():.4f}")
+
+        # 5. Activation Distribution
+        def print_activation_stats(tensor, name):
+            print(f"{name} - Mean: {tensor.mean().item():.4f}, Std: {tensor.std().item():.4f}, Min: {tensor.min().item():.4f}, Max: {tensor.max().item():.4f}")
+
+        print_activation_stats(caa_vector, "Original")
+        print_activation_stats(full_reconstruction, "Full reconstruction")
+        print_activation_stats(top_k_reconstruction, f"Top {TOP_K_FEATURES} reconstruction")
+
+        # 6. Behavioral Analysis is already being done through steering analysis
+
+        # Calculate reconstruction loss for different numbers of top features
+        reconstruction_losses = []
+        feature_counts = range(1, TOP_K_FEATURES + 1, 1)  # Adjust step size if needed
+        for k in feature_counts:
+            top_k_reconstruction = torch.zeros_like(caa_vector)
+            for idx in list(top_features.keys())[:k]:
+                top_k_reconstruction += feature_contributions[idx]
+            loss = torch.nn.functional.mse_loss(caa_vector, top_k_reconstruction).item()
+            reconstruction_losses.append(loss)
+
+        # Plot reconstruction loss
+        plt.figure(figsize=(10, 6))
+        plt.plot(feature_counts, reconstruction_losses, marker='o')
+        plt.title(f'Reconstruction Loss vs Number of Top Features for {behavior}')
+        plt.xlabel('Number of Top Features')
+        plt.ylabel('Reconstruction Loss (MSE)')
+        plt.yscale('log')  # Use log scale for better visualization
+        plt.grid(True)
+        plot_path = os.path.join(normalized_dir, f"reconstruction_loss_plot_{layer}_{model_name_path}.png")
+        plt.savefig(plot_path)
+        plt.close()
+        print(f"Reconstruction loss plot saved to {plot_path}")
+
+        original_norm = caa_vector.norm().item()
+        feature_norms = {idx: feature_contributions[idx].norm().item() for idx in top_features.keys()}
+        return top_features, feature_norms, original_norm
+
+    # Save top feature vectors in normalized_vectors folder
+    for idx in list(top_features.keys())[:TOP_K_FEATURES]:
         feature_vector = feature_contributions[idx]
-        feature_path = fix_vector_path(os.path.join(normalized_dir, f"vec_layer_{layer}_{model_name_path}_feature_{idx}.pt"))
+        feature_path = os.path.join(normalized_dir, f"feature_{idx}_layer_{layer}_{model_name_path}.pt")
         torch.save(feature_vector, feature_path)
 
-    print(f"Saved top 5 feature vectors in {normalized_dir}")
+    print(f"Saved top {TOP_K_FEATURES} feature vectors in {normalized_dir}")
     print("To process these vectors, run:")
     print(f"python prompting_with_steering.py --layers $(seq {layer-1} {layer+1}) --multipliers -0.5 0 0.5 --type ab --model_size 2b --model_type gemma_1 --use_base_model")
     print("Then, to plot the results, run:")
     print(f"python plot_results.py --layers {layer} --multipliers -1 -0.5 0 0.5 1 --type ab --model_type gemma_1 --model_size 2b --use_base_model --behavior {behavior}")
 
-    # Run steering analysis for the original vector and top 5 feature vectors
-    print("Running steering analysis for the original vector and top 5 feature vectors...")
-    for idx in ['original'] + list(top_features.keys())[:5]:
+    # Run steering analysis for the original vector and top feature vectors
+    print(f"Running steering analysis for the original vector and top {TOP_K_FEATURES} feature vectors...")
+    for idx in ['original'] + list(top_features.keys())[:TOP_K_FEATURES]:
         if idx == 'original':
             vector_path = original_path
         else:
@@ -133,24 +269,74 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b'):
 
     print("Plotting complete. Results saved in the plots folder.")
 
-    return top_features
+    # Combine top features
+    combined_vector = torch.zeros_like(caa_vector)
+    for idx in list(top_features.keys())[:TOP_K_FEATURES]:
+        combined_vector += feature_contributions[idx]
 
-def print_top_10_features(behavior, layer=10, model_name_path='gemma-2b'):
-    top_features = analyze_gemma_vector(behavior, layer, model_name_path)
-    print(f"\nTop 10 features for '{behavior}' in layer {layer}:")
-    for rank, (idx, activation) in enumerate(list(top_features.items())[:10], 1):
-        print(f"{rank}. Feature {idx}: Activation {activation:.4f}")
+    # Save the combined vector
+    combined_vector_path = os.path.join(normalized_dir, f"features_top{TOP_K_FEATURES}combined_layer_{layer}_{model_name_path}.pt")
+    torch.save(combined_vector, combined_vector_path)
+    print(f"Saved combined top {TOP_K_FEATURES} features vector to {combined_vector_path}")
+
+    # Calculate and print the norm of the combined vector
+    combined_norm = combined_vector.norm().item()
+    print(f"Norm of combined top {TOP_K_FEATURES} features vector: {combined_norm:.4f}")
+
+    # Calculate cross entropy loss
+    model = Gemma1Wrapper(model_name_path)
+    model = model.to(device)
+
+    original_logits = model(caa_vector.unsqueeze(0))
+    full_reconstruction_logits = model(full_reconstruction.unsqueeze(0))
+    top_k_reconstruction_logits = model(top_k_reconstruction.unsqueeze(0))
+
+    criterion = torch.nn.CrossEntropyLoss()
+    target = torch.argmax(original_logits, dim=-1)
+
+    original_loss = criterion(original_logits, target)
+    full_reconstruction_loss = criterion(full_reconstruction_logits, target)
+    top_k_reconstruction_loss = criterion(top_k_reconstruction_logits, target)
+
+    print(f"Cross entropy loss - Original: {original_loss.item():.4f}")
+    print(f"Cross entropy loss - Full reconstruction: {full_reconstruction_loss.item():.4f}")
+    print(f"Cross entropy loss - Top {TOP_K_FEATURES} reconstruction: {top_k_reconstruction_loss.item():.4f}")
+
+    original_norm = caa_vector.norm().item()
+    feature_norms = {idx: feature_contributions[idx].norm().item() for idx in top_features.keys()}
+    return top_features, feature_norms, original_norm
+
+def print_top_features(behavior, layer=10, model_name_path='gemma-2b', only_combined_vector=False):
+    global TOP_K_FEATURES
+    top_features, feature_norms, original_norm = analyze_gemma_vector(behavior, layer, model_name_path, only_combined_vector)
+    if not only_combined_vector:
+        print(f"\nTop {TOP_K_FEATURES} features for '{behavior}' in layer {layer}:")
+        print(f"0. Original Vector: Norm {original_norm:.4f}")
+        for rank, (idx, activation) in enumerate(list(top_features.items())[:TOP_K_FEATURES], 1):
+            print(f"{rank}. Feature {idx}: Activation {activation:.4f}, Norm {feature_norms[idx]:.4f}")
+
+def calculate_loss_recovered(original, reconstruction, metric='mse'):
+    if metric == 'mse':
+        full_loss = torch.nn.functional.mse_loss(original, torch.zeros_like(original)).item()
+        reconstruction_loss = torch.nn.functional.mse_loss(original, reconstruction).item()
+        loss_recovered = (full_loss - reconstruction_loss) / full_loss
+    elif metric == 'cosine':
+        loss_recovered = torch.nn.functional.cosine_similarity(original.view(1, -1), reconstruction.view(1, -1)).item()
+    else:
+        raise ValueError("Invalid metric. Choose 'mse' or 'cosine'.")
+    
+    return loss_recovered * 100  # Return as percentage
 
 if __name__ == "__main__":
-    import sys
+    import argparse
     from behaviors import COORDINATE, ALL_BEHAVIORS
 
-    if len(sys.argv) > 1 and sys.argv[1] in ALL_BEHAVIORS:
-        behavior = sys.argv[1]
-    else:
-        behavior = COORDINATE
+    parser = argparse.ArgumentParser(description="Analyze Gemma vector for a specific behavior.")
+    parser.add_argument("--behavior", type=str, default=COORDINATE, choices=ALL_BEHAVIORS, help="Behavior to analyze")
+    parser.add_argument("--layer", type=int, default=10, help="Layer to analyze")
+    parser.add_argument("--model_name_path", type=str, default='gemma-2b', help="Model name path")
+    parser.add_argument("--only_combined_vector", action="store_true", help="Only generate and save the combined vector")
 
-    layer = 10 if len(sys.argv) <= 2 else int(sys.argv[2])
-    model_name_path = 'gemma-2b' if len(sys.argv) <= 3 else sys.argv[3]
+    args = parser.parse_args()
 
-    print_top_10_features(behavior, layer, model_name_path)
+    print_top_features(args.behavior, args.layer, args.model_name_path, args.only_combined_vector)
