@@ -14,9 +14,10 @@ import os
 from dotenv import load_dotenv
 from llama_wrapper import LlamaWrapper
 from gemma_1_wrapper import Gemma1Wrapper
+from gemma_2_wrapper import Gemma2Wrapper
 import argparse
 from typing import List
-from utils.tokenize import tokenize_llama_base, tokenize_llama_chat, tokenize_gemma_1_base # tokenize_gemma_1_chat
+from utils.tokenize import tokenize_llama_base, tokenize_llama_chat, tokenize_gemma_1_base, tokenize_gemma_2_base # tokenize_gemma_1_chat
 from behaviors import (
     get_vector_dir,
     get_activations_dir,
@@ -57,6 +58,12 @@ class ComparisonDataset(Dataset):
             )
         elif not self.use_chat and model_type == "gemma_1":
             tokens = tokenize_gemma_1_base(
+                self.tokenizer,
+                user_input=instruction,
+                model_output=model_output,
+            )
+        elif not self.use_chat and model_type == "gemma_2":
+            tokens = tokenize_gemma_2_base(
                 self.tokenizer,
                 user_input=instruction,
                 model_output=model_output,
@@ -163,7 +170,7 @@ def generate_save_vectors(
             generate_save_vectors_for_behavior(
                 layers, save_activations, behavior, model
             )
-    else:
+    elif model_type == "gemma_1":
         model = Gemma1Wrapper(
             HUGGINGFACE_TOKEN, size=model_size, model_type=model_type
         )
@@ -171,6 +178,16 @@ def generate_save_vectors(
             generate_save_vectors_for_behavior(
                 layers, save_activations, behavior, model
             )
+    elif model_type == "gemma_2":
+        model = Gemma2Wrapper(
+            HUGGINGFACE_TOKEN, size=model_size, model_type=model_type
+        )
+        for behavior in behaviors:
+            generate_save_vectors_for_behavior(
+                layers, save_activations, behavior, model
+            )
+    else:
+        raise ValueError(f"Model type {model_type} not supported")
 
 
 if __name__ == "__main__":
@@ -180,7 +197,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_base_model", action="store_true", default=False)
     parser.add_argument("--model_size", type=str, choices=["7b", "13b", "2b"], default="7b")
     parser.add_argument("--behaviors", nargs="+", type=str, default=ALL_BEHAVIORS)
-    parser.add_argument("--model_type", type=str, choices=["llama", "gemma_1"], default="llama")
+    parser.add_argument("--model_type", type=str, choices=["llama", "gemma_1", "gemma_2"], default="llama")
 
     args = parser.parse_args()
     generate_save_vectors(

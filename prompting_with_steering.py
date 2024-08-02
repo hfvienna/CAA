@@ -8,6 +8,7 @@ python prompting_with_steering.py --behaviors sycophancy --layers 10 --multiplie
 import json
 from llama_wrapper import LlamaWrapper
 from gemma_1_wrapper import Gemma1Wrapper
+from gemma_2_wrapper import Gemma2Wrapper
 import os
 from dotenv import load_dotenv
 import argparse
@@ -97,7 +98,7 @@ def process_item_tqa_mmlu(
 
 
 def test_steering(
-    layers: List[int], multipliers: List[int], settings: SteeringSettings, overwrite=False
+    layers: List[int], multipliers: List[int], settings: SteeringSettings, overwrite=False, overwrite_vectors=False
 ):
     """
     layers: List of layers to test steering on.
@@ -119,8 +120,8 @@ def test_steering(
         "truthful_qa": get_truthful_qa_data(),
         "mmlu": get_mmlu_data(),
     }
-    # hfvienna override
-    model = Gemma1Wrapper(
+    # hfvienna override CRITICAL OVERRIDE KEEP IN MIND
+    model = Gemma2Wrapper(
         HUGGINGFACE_TOKEN,
         size=settings.model_size,
         use_chat=not settings.use_base_model,
@@ -196,7 +197,8 @@ if __name__ == "__main__":
     parser.add_argument("--model_size", type=str, choices=["7b", "13b", "2b"], default="7b")
     parser.add_argument("--override_model_weights_path", type=str, default=None)
     parser.add_argument("--overwrite", action="store_true", default=False)
-    parser.add_argument("--model_type", type=str, choices=["llama", "gemma_1"], default="llama")
+    parser.add_argument("--model_type", type=str, choices=["llama", "gemma_1", "gemma_2"], default="llama")
+    parser.add_argument("--overwrite_vectors", action="store_true", default=False, help="Overwrite existing vectors if they exist")
     
     args = parser.parse_args()
 
@@ -209,6 +211,7 @@ if __name__ == "__main__":
     steering_settings.model_size = args.model_size
     steering_settings.override_model_weights_path = args.override_model_weights_path
     steering_settings.model_type = args.model_type
+    steering_settings.overwrite_vectors = args.overwrite_vectors
 
     for behavior in args.behaviors:
         steering_settings.behavior = behavior
@@ -217,4 +220,5 @@ if __name__ == "__main__":
             multipliers=args.multipliers,
             settings=steering_settings,
             overwrite=args.overwrite,
+            overwrite_vectors=args.overwrite_vectors
         )

@@ -69,6 +69,8 @@ def get_model_path(size: str, is_base: bool, model_type: str):
     # hfvienna is_base override
     elif model_type == "gemma_1":
         return f"google/gemma-{size}"
+    elif model_type == "gemma_2":
+        return f"google/gemma-2-{size}"
     else:
         print("Model path not found.")
         return None

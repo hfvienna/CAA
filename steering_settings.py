@@ -71,11 +71,21 @@ class SteeringSettings:
     
     def get_formatted_model_name(self):
         print(self.use_base_model, self.model_size, self.model_type)
-        if self.use_base_model:
+        if self.model_type == "gemma_1":
+            if self.model_size == "2b":
+                return "google/gemma-2b"
+            elif self.model_size == "7b":
+                return "google/gemma-7b"
+            else:
+                raise ValueError(f"Invalid model size for Gemma: {self.model_size}")
+        elif self.model_type == "gemma_2":
+            if self.model_size == "2b":
+                return "google/gemma-2-2b"
+            else:
+                raise ValueError(f"Invalid model size for Gemma: {self.model_size}")
+        elif self.use_base_model:
             if self.model_size == "7b":
                 return "Llama 2 7B Base"
-            if self.model_size == "2b" and self.model_type == "gemma_1":
-                return "Gemma 1 2B Base"
             else:
                 return "Llama 2 13B Base"
         else:

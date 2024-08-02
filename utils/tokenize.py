@@ -44,3 +44,15 @@ def tokenize_gemma_1_base(
     if model_output is not None:
         input_content += f"{BASE_RESPONSE} {model_output.strip()}"
     return tokenizer.encode(input_content)
+
+
+def tokenize_gemma_2_base(
+    tokenizer, user_input: str, model_output: str = None
+) -> List[int]:
+    print("Using Gemma 2 base tokenizer")
+
+    input_content = ""
+    input_content += f"{BASE_INPUT} {user_input.strip()}"
+    if model_output is not None:
+        input_content += f"{BASE_RESPONSE} {model_output.strip()}"
+    return tokenizer.encode(input_content)
