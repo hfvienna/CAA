@@ -7,12 +7,14 @@ import time
 import torch
 
 from behaviors import ALL_BEHAVIORS, BASE_DIR, COORDINATE, get_vector_path
-from gemma_1_wrapper import Gemma1Wrapper
+from gemma_2_wrapper import Gemma2Wrapper
 from generate_vectors import generate_save_vectors_for_behavior
-from sae_lens import SAE
+from huggingface_hub import hf_hub_download
+import numpy as np
+import torch.nn as nn
 
 HUGGINGFACE_TOKEN = os.environ.get('HUGGINGFACE_TOKEN')
-TOP_K_FEATURES = 100
+TOP_K_FEATURES = 20
 
 def decompose_caa_vector(sae, caa_vector, top_k=20):
     caa_vector = caa_vector.to(sae.W_enc.device).view(1, -1)
@@ -57,13 +59,19 @@ def extract_numerical_value(output):
     return output
 
 def fix_vector_path(path):
-    # Remove duplicate 'vec_layer_' if present
-    if path.count('vec_layer_') > 1:
-        parts = path.split('vec_layer_')
-        path = os.path.join(os.path.dirname(path), f"vec_layer_{parts[-1]}")
+    parts = path.split('_')
+    if 'feature' in parts:
+        feature = parts[parts.index('feature') + 1]
+        layer = parts[parts.index('layer') + 1]
+        model = '_'.join(parts[parts.index('gemma'):])
+        path = os.path.join(os.path.dirname(path), f"feature_{feature}_layer_{layer}_{model}.pt")
+    elif 'vec' in parts:
+        layer = parts[parts.index('layer') + 1]
+        model = '_'.join(parts[parts.index('gemma'):])
+        path = os.path.join(os.path.dirname(path), f"vec_layer_{layer}_{model}.pt")
     
     # Remove duplicate '.pt' extension if present
-    if path.endswith('.pt.pt'):
+    while path.endswith('.pt.pt'):
         path = path[:-3]
     
     return path
@@ -74,7 +82,8 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b', only_co
     normalized_dir = os.path.join(BASE_DIR, 'normalized_vectors', behavior)
 
     # Load the existing normalized vector
-    original_path = fix_vector_path(os.path.join(normalized_dir, f"vec_layer_{layer}_{model_name_path}.pt"))
+    original_path = os.path.join(normalized_dir, f"vec_layer_{layer}_{model_name_path}.pt")
+    original_path = fix_vector_path(original_path)
     caa_vector = torch.load(original_path)
 
     print(f"Analyzing vector for behavior: {behavior}")
@@ -89,20 +98,50 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b', only_co
     print(f"Norm of the original vector: {caa_vector.norm().item():.4f}")
 
     # Load the SAE model
-    sae_layer_use = layer
-    sae, cfg_dict, _ = SAE.from_pretrained(
-        release="gemma-2b-res-jb",
-        sae_id=f"blocks.{sae_layer_use}.hook_resid_post"
+    sae_model_name = "google/gemma-scope-2b-pt-res"
+    path_to_params = hf_hub_download(
+        repo_id=sae_model_name,
+        filename=f"layer_{layer}/width_16k/average_l0_83/params.npz",
+        force_download=False,
     )
+
+    params = np.load(path_to_params)
+    pt_params = {k: torch.from_numpy(v).to(device) for k, v in params.items()}
+
+    class JumpReLUSAE(nn.Module):
+        def __init__(self, d_model, d_sae):
+            super().__init__()
+            self.W_enc = nn.Parameter(torch.zeros(d_model, d_sae))
+            self.W_dec = nn.Parameter(torch.zeros(d_sae, d_model))
+            self.threshold = nn.Parameter(torch.zeros(d_sae))
+            self.b_enc = nn.Parameter(torch.zeros(d_sae))
+            self.b_dec = nn.Parameter(torch.zeros(d_model))
+
+        def encode(self, input_acts):
+            pre_acts = input_acts @ self.W_enc + self.b_enc
+            mask = (pre_acts > self.threshold)
+            acts = mask * torch.nn.functional.relu(pre_acts)
+            return acts
+
+        def decode(self, acts):
+            return acts @ self.W_dec + self.b_dec
+
+        def forward(self, acts):
+            acts = self.encode(acts)
+            recon = self.decode(acts)
+            return recon
+
+    sae = JumpReLUSAE(params['W_enc'].shape[0], params['W_enc'].shape[1])
+    sae.load_state_dict(pt_params)
     sae = sae.to(device)
+
+    # Get the hook point
+    hook_point = f"blocks.{layer}.hook_resid_post"
+    print(f"Hook point: {hook_point}")
 
     # Calculate and print the norm for all features
     all_features_norm = torch.norm(sae.W_dec, dim=1)
     print(f"Norm of all features: {all_features_norm.mean().item():.4f} (mean), {all_features_norm.min().item():.4f} (min), {all_features_norm.max().item():.4f} (max)")
-
-    # Get hook point
-    hook_point = sae.cfg.hook_name
-    print(f"Hook point: {hook_point}")
 
     # Decompose the CAA vector
     top_features, feature_contributions, reconstructed, error = decompose_caa_vector(sae, caa_vector)
@@ -180,7 +219,7 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b', only_co
             print(f"  Loss Recovered (Cosine): {loss_recovered_cosine:.2f}%")
 
         # 4. Cross Entropy Loss
-        model = Gemma1Wrapper(model_name_path)
+        model = Gemma2Wrapper(model_name_path)
         model = model.to(device)
 
         original_logits = model(caa_vector.unsqueeze(0))
@@ -239,6 +278,7 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b', only_co
     for idx in list(top_features.keys())[:TOP_K_FEATURES]:
         feature_vector = feature_contributions[idx]
         feature_path = os.path.join(normalized_dir, f"feature_{idx}_layer_{layer}_{model_name_path}.pt")
+        feature_path = fix_vector_path(feature_path)
         torch.save(feature_vector, feature_path)
 
     print(f"Saved top {TOP_K_FEATURES} feature vectors in {normalized_dir}")
@@ -253,8 +293,8 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b', only_co
         if idx == 'original':
             vector_path = original_path
         else:
-            vector_path = os.path.join(normalized_dir, f"vec_layer_{layer}_{model_name_path}_feature_{idx}.pt")
-        
+            vector_path = os.path.join(normalized_dir, f"feature_{idx}_layer_{layer}_{model_name_path}.pt")
+            vector_path = fix_vector_path(vector_path)
         command = f"python prompting_with_steering.py --layers $(seq {layer-1} {layer+1}) --multipliers -0.5 0 0.5 --type ab --model_size 2b --model_type gemma_1 --use_base_model --behavior {behavior} --override_vector_model {vector_path}"
         print(f"Running command: {command}")
         os.system(command)
@@ -284,7 +324,7 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b', only_co
     print(f"Norm of combined top {TOP_K_FEATURES} features vector: {combined_norm:.4f}")
 
     # Calculate cross entropy loss
-    model = Gemma1Wrapper(model_name_path)
+    model = Gemma2Wrapper(model_name_path)
     model = model.to(device)
 
     original_logits = model(caa_vector.unsqueeze(0))

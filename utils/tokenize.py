@@ -4,7 +4,7 @@ from transformers import PreTrainedTokenizer
 B_INST, E_INST = "[INST]", "[/INST]"
 B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
 BASE_INPUT = "Input:"
-BASE_RESPONSE = "\nResponse:"
+BASE_RESPONSE = "\nResponse:"     #hfvienna OVERRIDE POSITION "\nResponse:"
 
 ADD_FROM_POS_CHAT = E_INST
 ADD_FROM_POS_BASE = BASE_RESPONSE
