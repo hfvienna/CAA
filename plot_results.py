@@ -113,6 +113,9 @@ def plot_ab_results_for_layer(
     if (settings.override_vector is None) and (settings.override_vector_model is None) and (settings.override_model_weights_path is None):
         plt.title(f"{HUMAN_NAMES[settings.behavior]} - {settings.get_formatted_model_name()}", fontsize=11)
     plt.tight_layout()
+    # Create the directory if it doesn't exist
+    os.makedirs(os.path.dirname(save_to), exist_ok=True)
+    # Then save the plot
     plt.savefig(save_to, format="png")
     # Save data in all_results used for plotting as .txt
     with open(save_to.replace(".png", ".txt"), "w") as f, open(save_to.replace(".png", ".tex"), "w") as f_tex:
@@ -171,6 +174,9 @@ def plot_finetuning_openended_comparison(settings: SteeringSettings, finetune_po
     plt.xticks(ticks=multipliers, labels=multipliers)
     plt.title(f"CAA + finetuning {HUMAN_NAMES[settings.behavior]}")
     plt.tight_layout()
+    # Create the directory if it doesn't exist
+    os.makedirs(os.path.dirname(save_to), exist_ok=True)
+    # Then save the plot
     plt.savefig(save_to, format="png")
     with open(save_to.replace(".png", ".txt"), "w") as f, open(save_to.replace(".png", ".tex"), "w") as f_tex:
         for model_name, res_list in all_res.items():
@@ -225,6 +231,9 @@ def plot_tqa_mmlu_results_for_layer(
     if (settings.override_vector is None) and (settings.override_vector_model is None) and (settings.override_model_weights_path is None):
         plt.title(f"Effect of {HUMAN_NAMES[settings.behavior]} CAA on {settings.get_formatted_model_name()} performance")
     plt.tight_layout()
+    # Create the directory if it doesn't exist
+    os.makedirs(os.path.dirname(save_to), exist_ok=True)
+    # Then save the plot
     plt.savefig(save_to, format="png")
 
     def _format_for_latex_table(x, baseline):
@@ -302,6 +311,9 @@ def plot_open_ended_results(
     plt.xlabel("Multiplier")
     plt.ylabel("Average behavioral eval score")
     plt.tight_layout()
+    # Create the directory if it doesn't exist
+    os.makedirs(os.path.dirname(save_to), exist_ok=True)
+    # Then save the plot
     plt.savefig(save_to, format="png")
     # Save data in res_list used for plotting as .txt
     with open(save_to.replace(".png", ".txt"), "w") as f:
@@ -344,6 +356,9 @@ def plot_ab_data_per_layer(
     plt.xticks(ticks=sorted(layers), labels=sorted(layers))
     plt.legend()
     plt.tight_layout()
+    # Create the directory if it doesn't exist
+    os.makedirs(os.path.dirname(save_to), exist_ok=True)
+    # Then save the plot
     plt.savefig(save_to, format="png")
     with open(save_to.replace(".png", ".txt"), "w") as f:
         for layer in sorted(layers):
@@ -405,6 +420,9 @@ def plot_effect_on_behaviors(
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     # hfvienna plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.) use bbox_to_anchor=(1.05, 1) for width 9
     plt.tight_layout()
+    # Create the directory if it doesn't exist
+    os.makedirs(os.path.dirname(save_to), exist_ok=True)
+    # Then save the plot
     plt.savefig(save_to, format="png")
     plt.savefig(save_to.replace("png", "svg"), format="svg")
     with open(save_to.replace(".png", ".txt"), "w") as f:
@@ -480,6 +498,9 @@ def plot_layer_sweeps(
     plt.xticks(ticks=sorted(layers)[::5], labels=sorted(layers)[::5])
     plt.legend()
     plt.tight_layout()
+    # Create the directory if it doesn't exist
+    os.makedirs(os.path.dirname(save_to), exist_ok=True)
+    # Then save the plot
     plt.savefig(save_to, format="png")
 
 def steering_settings_from_args(args, behavior: str) -> SteeringSettings:

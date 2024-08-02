@@ -80,7 +80,7 @@ class SteeringSettings:
                 raise ValueError(f"Invalid model size for Gemma: {self.model_size}")
         elif self.model_type == "gemma_2":
             if self.model_size == "2b":
-                return "google/gemma-2-2b"
+                return "Gemma 2 2B Base"
             else:
                 raise ValueError(f"Invalid model size for Gemma: {self.model_size}")
         elif self.use_base_model:
