@@ -108,28 +108,7 @@ def analyze_gemma_vector(behavior, layer=10, model_name_path='gemma-2b', only_co
     params = np.load(path_to_params)
     pt_params = {k: torch.from_numpy(v).to(device) for k, v in params.items()}
 
-    class JumpReLUSAE(nn.Module):
-        def __init__(self, d_model, d_sae):
-            super().__init__()
-            self.W_enc = nn.Parameter(torch.zeros(d_model, d_sae))
-            self.W_dec = nn.Parameter(torch.zeros(d_sae, d_model))
-            self.threshold = nn.Parameter(torch.zeros(d_sae))
-            self.b_enc = nn.Parameter(torch.zeros(d_sae))
-            self.b_dec = nn.Parameter(torch.zeros(d_model))
 
-        def encode(self, input_acts):
-            pre_acts = input_acts @ self.W_enc + self.b_enc
-            mask = (pre_acts > self.threshold)
-            acts = mask * torch.nn.functional.relu(pre_acts)
-            return acts
-
-        def decode(self, acts):
-            return acts @ self.W_dec + self.b_dec
-
-        def forward(self, acts):
-            acts = self.encode(acts)
-            recon = self.decode(acts)
-            return recon
 
     sae = JumpReLUSAE(params['W_enc'].shape[0], params['W_enc'].shape[1])
     sae.load_state_dict(pt_params)
@@ -380,3 +359,27 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print_top_features(args.behavior, args.layer, args.model_name_path, args.only_combined_vector)
+
+
+class JumpReLUSAE(nn.Module):
+    def __init__(self, d_model, d_sae):
+        super().__init__()
+        self.W_enc = nn.Parameter(torch.zeros(d_model, d_sae))
+        self.W_dec = nn.Parameter(torch.zeros(d_sae, d_model))
+        self.threshold = nn.Parameter(torch.zeros(d_sae))
+        self.b_enc = nn.Parameter(torch.zeros(d_sae))
+        self.b_dec = nn.Parameter(torch.zeros(d_model))
+
+    def encode(self, input_acts):
+        pre_acts = input_acts @ self.W_enc + self.b_enc
+        mask = (pre_acts > self.threshold)
+        acts = mask * torch.nn.functional.relu(pre_acts)
+        return acts
+
+    def decode(self, acts):
+        return acts @ self.W_dec + self.b_dec
+
+    def forward(self, acts):
+        acts = self.encode(acts)
+        recon = self.decode(acts)
+        return recon
