@@ -1,3 +1,10 @@
+"""
+This script normalizes vectors for different behaviors within each layer of a model to have the same norm.
+It processes vectors for all specified layers and behaviors, normalizes them, and saves the normalized vectors
+to a new directory.
+"""
+
+
 from behaviors import ALL_BEHAVIORS, get_vector_path
 from utils.helpers import get_model_path
 import torch as t
