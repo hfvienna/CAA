@@ -21,25 +21,20 @@ set_plotting_settings()
 
 def get_data(
     layer: int,
-    multiplier: int,
+    multiplier: float,
     settings: SteeringSettings,
 ) -> Dict[str, Any]:
     print(f"Multiplier: {multiplier}")
-    directory = get_results_dir(settings.behavior)
-    if settings.type == "open_ended":
-        directory = directory.replace("results", os.path.join("results", "open_ended_scores"))
-    filenames = settings.filter_result_files_by_suffix(
-        directory, layer=layer, multiplier=multiplier
-    )
-    if len(filenames) > 1:
-        print(f"[WARN] >1 filename found for filter {settings}", filenames)
-    if len(filenames) == 0:
-        print(f"[WARN] no filenames found for filter {settings}")
+    directory = os.path.join("sae_vector_results", settings.behavior)
+    formatted_multiplier = f"{multiplier:.1f}"
+    filename = f"results_layer={layer}_multiplier={formatted_multiplier}_behavior={settings.behavior}_type={settings.type}_use_base_model={settings.use_base_model}_model_size={settings.model_size}.json"
+    filepath = os.path.join(directory, filename)
+    if not os.path.exists(filepath):
+        print(f"[WARN] File not found: {filepath}")
         return []
-    print(f"Get Data Filenames: {filenames}")
-    with open(filenames[0], "r") as f:
+    print(f"Get Data Filepath: {filepath}")
+    with open(filepath, "r") as f:
         return json.load(f)
-
 
 def get_avg_score(results: Dict[str, Any]) -> float:
     score_sum = 0.0
@@ -55,8 +50,11 @@ def get_avg_score(results: Dict[str, Any]) -> float:
         return 0.0
     return score_sum / tot
 
-
 def get_avg_key_prob(results: Dict[str, Any], key: str) -> float:
+    if not results:
+        print(f"[WARN] No results found for key: {key}")
+        return 0
+
     match_key_prob_sum = 0.0
     for result in results:
         matching_value = result[key]
@@ -66,7 +64,6 @@ def get_avg_key_prob(results: Dict[str, Any], key: str) -> float:
         elif "B" in matching_value:
             match_key_prob_sum += result["b_prob"] / denom
     return match_key_prob_sum / len(results)
-
 
 def plot_ab_results_for_layer(
     layer: int, multipliers: List[float], settings: SteeringSettings
@@ -78,7 +75,7 @@ def plot_ab_results_for_layer(
     ]
     settings.system_prompt = None
     save_to = os.path.join(
-        get_analysis_dir(settings.behavior),
+        "sae_plots",
         f"{settings.make_result_save_suffix(layer=layer)}.png",
     )
     plt.clf()
@@ -190,8 +187,6 @@ def plot_finetuning_openended_comparison(settings: SteeringSettings, finetune_po
         except KeyError:
             pass
 
-
-
 def plot_tqa_mmlu_results_for_layer(
     layer: int, multipliers: List[float], settings: SteeringSettings
 ):
@@ -282,7 +277,6 @@ def plot_tqa_mmlu_results_for_layer(
         avg_line = f"Average & {pos_avg} & {neg_avg} & {no_steering_avg} \\\ \n"
         f_tex.write(avg_line)
 
-
 def plot_open_ended_results(
     layer: int, multipliers: List[float], settings: SteeringSettings
 ):
@@ -319,7 +313,6 @@ def plot_open_ended_results(
     with open(save_to.replace(".png", ".txt"), "w") as f:
         for multiplier, score in res_list:
             f.write(f"{multiplier}\t{score}\n")
-
 
 def plot_ab_data_per_layer(
     layers: List[int], multipliers: List[float], settings: SteeringSettings

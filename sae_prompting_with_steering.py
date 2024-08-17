@@ -81,11 +81,9 @@ def test_steering(
         name_path = model.model_name_path
         if settings.override_vector_model is not None:
             name_path = settings.override_vector_model
-        print(f"Loading vector from: sae_vector_normalized/forwarded_normalized_{settings.behavior}.pt")
-        if settings.override_vector is not None:
-            vector = torch.load(os.path.join("sae_vector_normalized", f"forwarded_normalized_{settings.behavior}.pt"))
-        else:
-            vector = torch.load(os.path.join("sae_vector_normalized", f"forwarded_normalized_{settings.behavior}.pt"))
+        vector_path = os.path.join("sae_vector_normalized", f"normalized_{settings.behavior}.pt")
+        print(f"Loading vector from: {vector_path}")
+        vector = torch.load(vector_path)
         if settings.model_size != "7b":
             vector = vector.half()
         vector = vector.to(model.device)
