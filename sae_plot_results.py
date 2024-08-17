@@ -368,7 +368,7 @@ def plot_effect_on_behaviors(
     multiplier_range = f"{min(multipliers)}to{max(multipliers)}"
     save_to = os.path.join(
         ANALYSIS_PATH,
-        f"layer={layer}_behaviors=multiple_type={settings.type}_multipliers={multiplier_range}_model_type={settings.model_type}_model_size={settings.model_size}_use_base_model={settings.use_base_model}.png",
+        f"sae_processed_layer={layer}_behaviors=multiple_type={settings.type}_multipliers={multiplier_range}_model_type={settings.model_type}_model_size={settings.model_size}_use_base_model={settings.use_base_model}.png",
     )
     all_results = []
     for behavior in behaviors:
@@ -399,7 +399,7 @@ def plot_effect_on_behaviors(
         )
     plt.xticks(ticks=multipliers, labels=multipliers)
     if title is None:
-        title = f"Layer {layer} - {settings.get_formatted_model_name()}"
+        title = f"SAE (16k, l0_23) -Layer {layer} - {settings.get_formatted_model_name()}"
     plt.title(title, fontsize=12)
     plt.xlabel("Steering vector multiplier")
     ylabel = "p(answer matching behavior) (%)"
