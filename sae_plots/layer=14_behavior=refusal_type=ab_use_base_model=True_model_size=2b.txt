@@ -1,0 +1,9 @@
+pos	-1.0	0
+pos	0.0	0
+pos	1.0	0
+neg	-1.0	0
+neg	0.0	0
+neg	1.0	0
+None	-1.0	0
+None	0.0	0
+None	1.0	0

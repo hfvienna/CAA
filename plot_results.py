@@ -432,6 +432,36 @@ def plot_effect_on_behaviors(
                 f.write(f"{all_results[idx]}\t")
             f.write("\n")
 
+    # Add table below the graph
+    cell_text = []
+    for behavior, results in zip(behaviors, all_results):
+        cell_text.append([f"{value:.2f}" for value in results])
+
+    col_labels = [f"M={m}" for m in multipliers]
+    row_labels = [HUMAN_NAMES[behavior] for behavior in behaviors]
+
+    # Adjust the figure size to accommodate the table
+    fig = plt.gcf()
+    fig.set_size_inches(8, 5 + 0.5 * len(behaviors))  # Increase overall size
+    plt.subplots_adjust(left=0.2, bottom=0.3)  # Increase bottom margin
+
+    # Add the table
+    the_table = plt.table(cellText=cell_text,
+                          rowLabels=row_labels,
+                          colLabels=col_labels,
+                          loc='bottom',
+                          bbox=[0, -0.8, 1, 0.5])  # Adjust table position
+
+    # Reduce font size in the table
+    the_table.auto_set_font_size(False)
+    the_table.set_fontsize(8)
+    the_table.scale(1, 1.5)
+
+    # Save the plot with the table
+    plt.savefig(save_to, format="png", bbox_inches='tight')
+    plt.savefig(save_to.replace("png", "svg"), format="svg", bbox_inches='tight')
+
+
 def plot_layer_sweeps(
     layers: List[int], behaviors: List[str], settings: SteeringSettings, title: str = None
 ):
