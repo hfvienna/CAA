@@ -93,4 +93,6 @@ class SteeringSettings:
                 return "Llama 2 7B Chat"
             else:
                 return "Llama 2 13B Chat"
-        
+                
+    def make_result_save_suffix(self, layer: int, multiplier: float, feature_index: str) -> str:
+        return f"{self.behavior}_layer{layer}_mult{multiplier}_feature{feature_index}"
