@@ -5,6 +5,8 @@ Usage:
 python sae_prompting_with_steering.py --behaviors sycophancy --layers 10 --multipliers 0.1 0.5 1 2 5 10 --type ab --use_base_model --model_size 7b
 """
 
+#Test
+
 import json
 import torch
 from llama_wrapper import LlamaWrapper
