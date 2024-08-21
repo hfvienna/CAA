@@ -53,14 +53,17 @@ def process_item_ab(
     }
 
 def test_steering(
-    layers: List[int], multipliers: List[int], settings: SteeringSettings, overwrite=False, overwrite_vectors=False
+    layers: List[int], multipliers: List[int], settings: SteeringSettings, overwrite=False, overwrite_vectors=False, use_normalized=False
 ):
     """
     layers: List of layers to test steering on.
     multipliers: List of multipliers to test steering with.
     settings: SteeringSettings object.
+    use_normalized: Whether to use normalized vectors.
     """
     save_results_dir = os.path.join("sae_vector_features", settings.behavior, "result")
+    if use_normalized:
+        save_results_dir = os.path.join(save_results_dir, "normalized")
     if not os.path.exists(save_results_dir):
         os.makedirs(save_results_dir)
     process_methods = {
@@ -81,6 +84,8 @@ def test_steering(
     test_data = test_datasets[settings.type]
     
     feature_vectors_dir = os.path.join("sae_vector_features", settings.behavior)
+    if use_normalized:
+        feature_vectors_dir = os.path.join(feature_vectors_dir, "normalized")
     feature_vectors = [f for f in os.listdir(feature_vectors_dir) if f.startswith("feature_") and f.endswith("_component_vector.pt")]
     
     for feature_vector_file in feature_vectors:
@@ -148,7 +153,8 @@ if __name__ == "__main__":
     parser.add_argument("--overwrite", action="store_true", default=False)
     parser.add_argument("--model_type", type=str, choices=["llama", "gemma_1", "gemma_2"], default="llama")
     parser.add_argument("--overwrite_vectors", action="store_true", default=False, help="Overwrite existing vectors if they exist")
-    
+    parser.add_argument("--normalized", action="store_true", default=False, help="Use normalized vectors")
+
     args = parser.parse_args()
 
     steering_settings = SteeringSettings()
@@ -169,5 +175,6 @@ if __name__ == "__main__":
             multipliers=args.multipliers,
             settings=steering_settings,
             overwrite=args.overwrite,
-            overwrite_vectors=args.overwrite_vectors
+            overwrite_vectors=args.overwrite_vectors,
+            use_normalized=args.normalized
         )
