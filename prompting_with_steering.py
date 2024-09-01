@@ -56,12 +56,13 @@ def process_item_ab(
 
 def process_item_open_ended(
     item: Dict[str, str],
-    model: LlamaWrapper,
+    model: Gemma2Wrapper,
     system_prompt: Optional[str],
     a_token_id: int,
     b_token_id: int,
 ) -> Dict[str, str]:
     question = item["question"]
+    print(model)
     model_output = model.generate_text(
         user_input=question, system_prompt=system_prompt, max_new_tokens=100
     )
@@ -133,8 +134,10 @@ def test_steering(
     test_data = test_datasets[settings.type]
     for layer in layers:
         name_path = model.model_name_path
+        print(name_path)
         if settings.override_vector_model is not None:
             name_path = settings.override_vector_model
+            print(name_path)
         if settings.override_vector is not None:
             vector = get_steering_vector(settings.behavior, settings.override_vector, name_path, normalized=True)
         else:
@@ -144,7 +147,7 @@ def test_steering(
         vector = vector.to(model.device)
         for multiplier in multipliers:
             result_save_suffix = settings.make_result_save_suffix(
-                layer=layer, multiplier=multiplier
+                layer=layer, multiplier=multiplier, feature_index=13065 #hfvienna override
             )
             save_filename = os.path.join(
                 save_results_dir,
@@ -166,6 +169,7 @@ def test_steering(
                     a_token_id=a_token_id,
                     b_token_id=b_token_id,
                 )
+                print(model)
                 results.append(result)
             with open(
                 save_filename,
