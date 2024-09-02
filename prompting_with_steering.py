@@ -6,8 +6,8 @@ python prompting_with_steering.py --behaviors sycophancy --layers 10 --multiplie
 """
 
 import json
-from llama_wrapper import LlamaWrapper
-from gemma_1_wrapper import Gemma1Wrapper
+#from llama_wrapper import LlamaWrapper
+#from gemma_1_wrapper import Gemma1Wrapper
 from gemma_2_wrapper import Gemma2Wrapper
 import os
 from dotenv import load_dotenv
@@ -34,7 +34,7 @@ HUGGINGFACE_TOKEN = os.getenv("HF_TOKEN")
 
 def process_item_ab(
     item: Dict[str, str],
-    model: LlamaWrapper,
+    model: Gemma2Wrapper,
     system_prompt: Optional[str],
     a_token_id: int,
     b_token_id: int,
@@ -66,6 +66,8 @@ def process_item_open_ended(
     model_output = model.generate_text(
         user_input=question, system_prompt=system_prompt, max_new_tokens=100
     )
+    print(question)
+    print(model_output)
     return {
         "question": question,
         "model_output": model_output.split(E_INST)[-1].strip(),
@@ -75,7 +77,7 @@ def process_item_open_ended(
 
 def process_item_tqa_mmlu(
     item: Dict[str, str],
-    model: LlamaWrapper,
+    model: Gemma2Wrapper,
     system_prompt: Optional[str],
     a_token_id: int,
     b_token_id: int,
@@ -198,10 +200,10 @@ if __name__ == "__main__":
     parser.add_argument("--override_vector", type=int, default=None)
     parser.add_argument("--override_vector_model", type=str, default=None)
     parser.add_argument("--use_base_model", action="store_true", default=False)
-    parser.add_argument("--model_size", type=str, choices=["7b", "13b", "2b"], default="7b")
+    parser.add_argument("--model_size", type=str, choices=["7b", "13b", "2b"], default="2b")
     parser.add_argument("--override_model_weights_path", type=str, default=None)
     parser.add_argument("--overwrite", action="store_true", default=False)
-    parser.add_argument("--model_type", type=str, choices=["llama", "gemma_1", "gemma_2"], default="llama")
+    parser.add_argument("--model_type", type=str, choices=["llama", "gemma_1", "gemma_2"], default="gemma_2")
     parser.add_argument("--overwrite_vectors", action="store_true", default=False, help="Overwrite existing vectors if they exist")
     
     args = parser.parse_args()
